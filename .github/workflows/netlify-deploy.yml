@@ -1,0 +1,118 @@
+name: Deploy to Netlify (custom)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Choose deployment target"
+        required: true
+        default: "prod"
+        type: choice
+        options: [prod, preview]
+
+permissions:
+  contents: read
+  deployments: write
+  pull-requests: write
+
+concurrency:
+  group: netlify-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Vite app
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      # Add any Vite envs like VITE_API_URL via "env:" block if you need them
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+  deploy:
+    name: Deploy to Netlify
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+      NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Install Netlify CLI + jq
+        run: |
+          npm i -g netlify-cli
+          sudo apt-get update -y
+          sudo apt-get install -y jq
+
+      - name: Deploy (prod or preview)
+        id: deploy
+        run: |
+          # Decide prod vs preview
+          if [ "${{ github.event_name }}" = "pull_request" ] || [ "${{ inputs.environment }}" = "preview" ]; then
+            netlify deploy \
+              --dir=dist \
+              --message "Preview ${GITHUB_SHA}" \
+              --json \
+              --auth "$NETLIFY_AUTH_TOKEN" \
+              --site "$NETLIFY_SITE_ID" > deploy.json
+          else
+            netlify deploy \
+              --prod \
+              --dir=dist \
+              --message "Prod ${GITHUB_SHA}" \
+              --json \
+              --auth "$NETLIFY_AUTH_TOKEN" \
+              --site "$NETLIFY_SITE_ID" > deploy.json
+          fi
+
+          echo "url=$(jq -r '.url // .deploy_url // empty' deploy.json)" >> $GITHUB_OUTPUT
+          echo "logs=$(jq -r '.logs // empty' deploy.json)" >> $GITHUB_OUTPUT
+          echo "deploy_id=$(jq -r '.deploy_id // empty' deploy.json)" >> $GITHUB_OUTPUT
+          cat deploy.json
+
+      - name: Comment preview url on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = `${{ steps.deploy.outputs.url }}`
+            const body = `🚀 Netlify preview: ${url}`
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body
+            })
+
+      - name: Job summary
+        run: |
+          echo "### Netlify URL" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.deploy.outputs.url }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Deploy ID: ${{ steps.deploy.outputs.deploy_id }}" >> $GITHUB_STEP_SUMMARY
