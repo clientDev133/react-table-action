@@ -1,0 +1,58 @@
+html,
+body {
+  background-color: white;
+  font-family: sans-serif;
+  padding: 8px;
+  table {
+    width: 100%;
+    text-align: center;
+    border-spacing: 0px;
+    border-top: 1px solid black;
+    td,
+    th {
+      background-color: white;
+      border-bottom: 1px solid black;
+      &:last-child {
+        border-right: 1px solid black;
+      }
+      &:first-child {
+        border-left: 1px solid black;
+      }
+    }
+    th {
+      background-color: #c5c5c5;
+    }
+    .column_resizer_body {
+      border-left: none;
+      border-right: none;
+      border-right: 1px solid black;
+    }
+    .columnResizer {
+      width: 20px !important;
+      min-width: 20px !important;
+      max-width: 20px !important;
+      padding: 0 0 0 0;
+      position: relative;
+      border-right: 1px solid black;
+    }
+    .columnResizer:not(.disabled_column_resize):after {
+      content: url("../images/resize_disabled_icon.svg");
+      position: absolute;
+      left: 5px;
+      top: calc(50% - 6px);
+      width: 13px;
+    }
+    .columnResizer:not(.disabled_column_resize):hover::after {
+      content: url("../images/resize_icon.svg");
+      position: absolute;
+      left: 5px;
+      top: calc(50% - 6px);
+      width: 13px;
+    }
+    .column_resizer_body {
+      width: 20px !important;
+      min-width: 20px !important;
+      max-width: 20px !important;
+    }
+  }
+}
